@@ -61,6 +61,14 @@ impl Osm {
         Ok(())
     }
 
+    fn end_element(&self, element: &str, name: String) -> ParseResult {
+        if name.as_slice() == element {
+            return Ok(());
+        }
+        return Err(ParseErr(format!(
+                        "Expecting {} to end, not a {}", element, name)));
+    }
+
     fn parse_node(&mut self, attrs: sax::Attributes) -> ParseResult { 
         let id  = attrs.find("id").and_then(|v| from_str(v));
         let lat = attrs.find("lat").and_then(|v| from_str(v));
@@ -84,11 +92,8 @@ impl Osm {
                     }
                 }
                 Ok(sax::EndElement(name)) => {
-                    if name.as_slice() == "node" {
-                        break;
-                    }
-                    return Err(ParseErr(format!(
-                        "Expecting node to end, not a {}", name)));
+                    try!(self.end_element("node", name));
+                    break;
                 }
                 _ => {},
             }
@@ -124,11 +129,8 @@ impl Osm {
                     }
                 }
                 Ok(sax::EndElement(name)) => {
-                    if name.as_slice() == "way" {
-                        break;
-                    }
-                    return Err(ParseErr(format!(
-                        "Expecting way to end. Instead got {}", name)));
+                    try!(self.end_element("way", name));
+                    break;
                 }
                 _ => (),
             }
@@ -143,11 +145,8 @@ impl Osm {
         for event in self.parser.iter() {
             match event {
                 Ok(sax::EndElement(name)) => {
-                    if name.as_slice() == "nd" {
-                        break;
-                    }
-                    return Err(ParseErr(format!(
-                        "Expecting nd to end. Instead got a {}", name)));
+                    try!(self.end_element("nd", name));
+                    break;
                 }
                 _ => return Err(ParseErr("Expecting nd to end".to_string()))
             }
@@ -164,16 +163,13 @@ impl Osm {
         for event in self.parser.iter() {
             match event {
                 Ok(sax::EndElement(name)) => {
-                    if name.as_slice() == "tag" {
-                        tags.insert(k, v);
-                        return Ok(());
-                    }
-                    return Err(ParseErr(format!(
-                        "Expecting tag to end. Instead got a {}", name)));
+                    try!(self.end_element("tag", name));
+                    break;
                 }
                 _ => return Err(ParseErr("Expecting tag to end".to_string())),
             }
         }
+        tags.insert(k, v);
         Ok(())
     }
 
@@ -183,14 +179,10 @@ impl Osm {
         for event in self.parser.iter() {
             match event {
                 Ok(sax::EndElement(name)) => {
-                    if name.as_slice() == "member" {
-                        break
-                    }
-
-                    return Err(ParseErr(format!(
-                        "Expecting tag to end. Instead got a {}", name)));
+                    try!(self.end_element("member", name));
+                    break;
                 }
-                _ => return Err(ParseErr("Expecting tag to end".to_string())),
+                _ => return Err(ParseErr("Expecting member to end".to_string())),
             }
         }
 
@@ -214,11 +206,8 @@ impl Osm {
                     }
                 }
                 Ok(sax::EndElement(name)) => {
-                    if name.as_slice() == "relation" {
-                        break;
-                    }
-                    return Err(ParseErr(format!(
-                        "Expecting tag to end. Instead got a {}", name)));
+                    try!(self.end_element("relation", name));
+                    break;
                 }
                 _ => ()
             }
