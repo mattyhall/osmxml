@@ -1,0 +1,17 @@
+[package]
+
+name = "osmxml"
+version = "0.0.1"
+authors = ["Matthew Hall <matthew@quickbeam.me.uk>"]
+
+[[lib]]
+name = "osmxml"
+path = "src/lib.rs"
+
+[[example]]
+name = "spa"
+path = "examples/main.rs"
+
+[dependencies.sax-rs]
+git = "https://github.com/bjz/sax-rs"
+
