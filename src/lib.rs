@@ -20,6 +20,7 @@ pub type ParseResult = Result<(), OsmParseError>;
 pub enum OsmElement {
     Node{id: int, lat: f64, lng: f64, visible: bool, tags: Tags},
     Way{id: int, nodes: Vec<int>, tags: Tags},
+    Relation{id: int, members: Vec<int>, tags: Tags},
 }
 
 pub struct Osm {
@@ -52,10 +53,10 @@ impl Osm {
 
     fn parse_start_element(&mut self, name: String, attrs: sax::Attributes) -> ParseResult {
         match name.as_slice() {
-            "relation" => try!(self.parse_relation()),
+            "relation" => try!(self.parse_relation(attrs)),
             "node" => try!(self.parse_node(attrs)),
             "way" => try!(self.parse_way(attrs)),
-            _  => println!("Skipping {} tag", name)
+            _  => ()
         }
         Ok(())
     }
@@ -159,6 +160,7 @@ impl Osm {
             (Some(k), Some(v)) => (k, v),
             _ => return Err(ParseErr("Tag must have a k and a v attribute".to_string()))
         };
+
         for event in self.parser.iter() {
             match event {
                 Ok(sax::EndElement(name)) => {
@@ -175,7 +177,54 @@ impl Osm {
         Ok(())
     }
 
-    fn parse_relation(&mut self) -> ParseResult {
+    fn parse_member(&self, attrs: sax::Attributes) -> Result<int, OsmParseError> {
+        let i = try!(self.parse_int_attr("ref", attrs));
+        
+        for event in self.parser.iter() {
+            match event {
+                Ok(sax::EndElement(name)) => {
+                    if name.as_slice() == "member" {
+                        break
+                    }
+
+                    return Err(ParseErr(format!(
+                        "Expecting tag to end. Instead got a {}", name)));
+                }
+                _ => return Err(ParseErr("Expecting tag to end".to_string())),
+            }
+        }
+
+        Ok(i)
+    }
+
+    fn parse_relation(&mut self, attrs: sax::Attributes) -> ParseResult {
+        let id = try!(self.parse_int_attr("id", attrs));
+        let mut tags = HashMap::new();
+        let mut members = Vec::new();
+
+        for event in self.parser.iter() {
+            match event {
+                Ok(sax::StartElement(name, attrs)) => {
+                    match name.as_slice() {
+                        "member" => members.push(try!(self.parse_member(attrs))),
+                        "tag" => try!(self.parse_tag(attrs, &mut tags)),
+                        _ => return Err(ParseErr(format!(
+                            "Relations can only have members and tags. Got {}",
+                            name)))
+                    }
+                }
+                Ok(sax::EndElement(name)) => {
+                    if name.as_slice() == "relation" {
+                        break;
+                    }
+                    return Err(ParseErr(format!(
+                        "Expecting tag to end. Instead got a {}", name)));
+                }
+                _ => ()
+            }
+        }
+
+        self.elements.insert(id, Relation{id: id, members: members, tags: tags});
         Ok(())
     }
 }
