@@ -61,10 +61,14 @@ impl Osm {
     }
 
     fn parse_node(&mut self, attrs: sax::Attributes) -> ParseResult { 
-        let id = from_str(attrs.get("id")).unwrap();
-        let lat = from_str(attrs.get("lat")).unwrap();
-        let lng = from_str(attrs.get("lon")).unwrap();
-        let visible = from_str(attrs.get("visible")).unwrap();
+        let id  = attrs.find("id").and_then(|v| from_str(v));
+        let lat = attrs.find("lat").and_then(|v| from_str(v));
+        let lng = attrs.find("lon").and_then(|v| from_str(v));
+        let visible = attrs.find("visible").and_then(|v| from_str(v));
+        let (id, lat, lng, visible) = match (id, lat, lng, visible) {
+            (Some(id), Some(lat), Some(lng), Some(visible)) => (id, lat, lng, visible),
+            _ => return Err(ParseErr("Could not find all required attributes on node"))
+        };
         let mut tags = HashMap::new();
 
         for event in self.parser.iter() {
