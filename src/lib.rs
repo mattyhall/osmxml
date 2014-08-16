@@ -94,8 +94,15 @@ impl Osm {
         Ok(())
     }
 
+    fn parse_int_attr(&self, k: &str, attrs: sax::Attributes) -> Result<int, OsmParseError> {
+        return match attrs.find(k).and_then(|v| from_str(v)) {
+            Some(id) => Ok(id),
+            None => Err(ParseErr("Could not find id/ref attribute")),
+        };
+    }
+
     fn parse_way(&mut self, attrs: sax::Attributes) -> ParseResult {
-        let id = from_str(attrs.get("id")).unwrap();
+        let id = try!(self.parse_int_attr("id", attrs));
         let mut nodes = Vec::new();
         let mut tags = HashMap::new();
 
@@ -122,7 +129,7 @@ impl Osm {
     }
 
     fn parse_nd(&mut self, attrs: sax::Attributes) -> Result<int, OsmParseError> {
-        let i = from_str(attrs.get("ref")).unwrap();
+        let i = try!(self.parse_int_attr("ref", attrs));
 
         for event in self.parser.iter() {
             match event {
@@ -159,7 +166,6 @@ impl Osm {
     }
 
     fn parse_relation(&mut self) -> ParseResult {
-
         Ok(())
     }
 }
