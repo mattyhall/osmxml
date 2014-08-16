@@ -11,7 +11,7 @@ pub type Tags = HashMap<String, String>;
 enum OsmParseError {
     IoErr(IoError),
     SaxErr(sax::error::ErrorData),
-    ParseErr(&'static str),
+    ParseErr(String),
 }
 
 pub type ParseResult = Result<(), OsmParseError>;
@@ -36,7 +36,7 @@ impl Osm {
     pub fn parse(&mut self) -> ParseResult {
         match self.parser.iter().next().unwrap() {
             Ok(sax::StartDocument) => (),
-            Ok(_) => return Err(ParseErr("Document did not start with StartDocument event")),
+            Ok(e) => return Err(ParseErr(format!("Document started with: {}", e))),
             Err(e) => return Err(SaxErr(e))
         }
 
@@ -67,7 +67,8 @@ impl Osm {
         let visible = attrs.find("visible").and_then(|v| from_str(v));
         let (id, lat, lng, visible) = match (id, lat, lng, visible) {
             (Some(id), Some(lat), Some(lng), Some(visible)) => (id, lat, lng, visible),
-            _ => return Err(ParseErr("Could not find all required attributes on node"))
+            _ => return Err(ParseErr(
+                "Could not find all required attributes on node".to_string()))
         };
         let mut tags = HashMap::new();
 
@@ -76,20 +77,24 @@ impl Osm {
                 Ok(sax::StartElement(name, attrs)) => {
                     match name.as_slice() {
                         "tag" => try!(self.parse_tag(attrs, &mut tags)),
-                        _ => return Err(ParseErr("Expecting all children of nodes to be tags")),
+                        _ => return Err(ParseErr(format!(
+                              "Expecting all children of nodes to be tags. Got a {}",
+                              name))),
                     }
                 }
                 Ok(sax::EndElement(name)) => {
                     if name.as_slice() == "node" {
                         break;
                     }
-                    return Err(ParseErr("Expecting node to end"));
+                    return Err(ParseErr(format!(
+                        "Expecting node to end, not a {}", name)));
                 }
                 _ => {},
             }
         }
 
-        self.elements.insert(id, Node{id: id, lat: lat, lng: lng, visible: visible, tags: tags});
+        self.elements.insert(id, Node{id: id, lat: lat, lng: lng,
+                                      visible: visible, tags: tags});
 
         Ok(())
     }
@@ -97,7 +102,7 @@ impl Osm {
     fn parse_int_attr(&self, k: &str, attrs: sax::Attributes) -> Result<int, OsmParseError> {
         return match attrs.find(k).and_then(|v| from_str(v)) {
             Some(id) => Ok(id),
-            None => Err(ParseErr("Could not find id/ref attribute")),
+            None => Err(ParseErr("Could not find id/ref attribute".to_string())),
         };
     }
 
@@ -112,14 +117,17 @@ impl Osm {
                     match name.as_slice() {
                         "nd" => nodes.push(try!(self.parse_nd(attrs))),
                         "tag" => try!(self.parse_tag(attrs, &mut tags)),
-                        _ => return Err(ParseErr("Expecting children of way to be a nd or a tag")),
+                        n => return Err(ParseErr(format!(
+                            "Expecting children of way to be a nd or a tag. Instead got a {}",
+                            n))),
                     }
                 }
                 Ok(sax::EndElement(name)) => {
                     if name.as_slice() == "way" {
                         break;
                     }
-                    return Err(ParseErr("Expecting way to end"));
+                    return Err(ParseErr(format!(
+                        "Expecting way to end. Instead got {}", name)));
                 }
                 _ => (),
             }
@@ -137,9 +145,10 @@ impl Osm {
                     if name.as_slice() == "nd" {
                         break;
                     }
-                    return Err(ParseErr("Expecting nd to end"));
+                    return Err(ParseErr(format!(
+                        "Expecting nd to end. Instead got a {}", name)));
                 }
-                _ => return Err(ParseErr("Expecting nd to end"))
+                _ => return Err(ParseErr("Expecting nd to end".to_string()))
             }
         }
         Ok(i)
@@ -148,7 +157,7 @@ impl Osm {
     fn parse_tag(&mut self, attrs: sax::Attributes, tags: &mut Tags) -> ParseResult {
         let (k, v) = match (attrs.find_clone("k"), attrs.find_clone("v")) {
             (Some(k), Some(v)) => (k, v),
-            _ => return Err(ParseErr("Tag must have a k and a v attribute"))
+            _ => return Err(ParseErr("Tag must have a k and a v attribute".to_string()))
         };
         for event in self.parser.iter() {
             match event {
@@ -157,9 +166,10 @@ impl Osm {
                         tags.insert(k, v);
                         return Ok(());
                     }
-                    return Err(ParseErr("Expecting tag to end"));
+                    return Err(ParseErr(format!(
+                        "Expecting tag to end. Instead got a {}", name)));
                 }
-                _ => return Err(ParseErr("Expecting tag to end")),
+                _ => return Err(ParseErr("Expecting tag to end".to_string())),
             }
         }
         Ok(())
