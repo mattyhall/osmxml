@@ -135,7 +135,10 @@ impl Osm {
     }
 
     fn parse_tag(&mut self, attrs: sax::Attributes, tags: &mut Tags) -> ParseResult {
-        let (k, v) = (attrs.get_clone("k"), attrs.get_clone("v"));
+        let (k, v) = match (attrs.find_clone("k"), attrs.find_clone("v")) {
+            (Some(k), Some(v)) => (k, v),
+            _ => return Err(ParseErr("Tag must have a k and a v attribute"))
+        };
         for event in self.parser.iter() {
             match event {
                 Ok(sax::EndElement(name)) => {
@@ -152,6 +155,7 @@ impl Osm {
     }
 
     fn parse_relation(&mut self) -> ParseResult {
+
         Ok(())
     }
 }
