@@ -1,5 +1,4 @@
-#![feature(globs)]
-#![feature(struct_variant)]
+#![feature(globs, macro_rules, struct_variant)]
 extern crate sax;
 
 use std::collections::HashMap;
@@ -23,6 +22,32 @@ pub enum OsmElement {
     Relation{id: int, members: Vec<int>, tags: Tags},
 }
 
+macro_rules! parse {
+    ($iter:expr, $close_tag:expr $(, $tag:pat => $method:expr)*) => {
+        for event in $iter {
+            match event {
+                Ok(sax::StartElement(name, attrs)) => {
+                    match name.as_slice() {
+                        $($tag => try!($method(attrs)),)*
+                        _ => return Err(ParseErr(format!(
+                              "Unexpected child in {} Got a {}",
+                              $close_tag, name))),
+                    }
+                }
+                Ok(sax::EndElement(name)) => {
+                    if name.as_slice() == $close_tag {
+                        break;
+                    }
+                    return Err(ParseErr(format!(
+                            "Expecting {} to end, not a {}", 
+                            $close_tag, name)));
+                }
+                _ => {},
+            }
+        }
+    }
+}
+
 pub struct Osm {
     pub parser: Receiver<sax::ParseResult>,
     pub elements: HashMap<int, OsmElement>,
@@ -44,6 +69,8 @@ impl Osm {
         for event in self.parser.iter() {
             match event {
                 Ok(sax::StartElement(name, attrs)) => try!(self.parse_start_element(name, attrs)),
+                // Should only skip comments/text as each parse function is responsible for
+                // matching it's ending event
                 Ok(_) => (),
                 Err(e) => return Err(SaxErr(e)),
             }
@@ -61,14 +88,6 @@ impl Osm {
         Ok(())
     }
 
-    fn end_element(&self, element: &str, name: String) -> ParseResult {
-        if name.as_slice() == element {
-            return Ok(());
-        }
-        return Err(ParseErr(format!(
-                        "Expecting {} to end, not a {}", element, name)));
-    }
-
     fn parse_node(&mut self, attrs: sax::Attributes) -> ParseResult { 
         let id  = attrs.find("id").and_then(|v| from_str(v));
         let lat = attrs.find("lat").and_then(|v| from_str(v));
@@ -81,23 +100,8 @@ impl Osm {
         };
         let mut tags = HashMap::new();
 
-        for event in self.parser.iter() {
-            match event {
-                Ok(sax::StartElement(name, attrs)) => {
-                    match name.as_slice() {
-                        "tag" => try!(self.parse_tag(attrs, &mut tags)),
-                        _ => return Err(ParseErr(format!(
-                              "Expecting all children of nodes to be tags. Got a {}",
-                              name))),
-                    }
-                }
-                Ok(sax::EndElement(name)) => {
-                    try!(self.end_element("node", name));
-                    break;
-                }
-                _ => {},
-            }
-        }
+        parse!(self.parser.iter(), "node", 
+               "tag" => |attrs| self.parse_tag(attrs, &mut tags));
 
         self.elements.insert(id, Node{id: id, lat: lat, lng: lng,
                                       visible: visible, tags: tags});
@@ -117,40 +121,17 @@ impl Osm {
         let mut nodes = Vec::new();
         let mut tags = HashMap::new();
 
-        for event in self.parser.iter() {
-            match event {
-                Ok(sax::StartElement(name, attrs)) => {
-                    match name.as_slice() {
-                        "nd" => nodes.push(try!(self.parse_nd(attrs))),
-                        "tag" => try!(self.parse_tag(attrs, &mut tags)),
-                        n => return Err(ParseErr(format!(
-                            "Expecting children of way to be a nd or a tag. Instead got a {}",
-                            n))),
-                    }
-                }
-                Ok(sax::EndElement(name)) => {
-                    try!(self.end_element("way", name));
-                    break;
-                }
-                _ => (),
-            }
-        }
+        parse!(self.parser.iter(), "way",
+               "nd" => |attrs| Ok(nodes.push(try!(self.parse_nd(attrs)))),
+               "tag" => |attrs| self.parse_tag(attrs, &mut tags));
+
         self.elements.insert(id, Way {id: id, nodes: nodes, tags: tags});
         Ok(())
     }
 
     fn parse_nd(&mut self, attrs: sax::Attributes) -> Result<int, OsmParseError> {
         let i = try!(self.parse_int_attr("ref", attrs));
-
-        for event in self.parser.iter() {
-            match event {
-                Ok(sax::EndElement(name)) => {
-                    try!(self.end_element("nd", name));
-                    break;
-                }
-                _ => return Err(ParseErr("Expecting nd to end".to_string()))
-            }
-        }
+        parse!(self.parser.iter(), "nd");
         Ok(i)
     }
 
@@ -160,31 +141,16 @@ impl Osm {
             _ => return Err(ParseErr("Tag must have a k and a v attribute".to_string()))
         };
 
-        for event in self.parser.iter() {
-            match event {
-                Ok(sax::EndElement(name)) => {
-                    try!(self.end_element("tag", name));
-                    break;
-                }
-                _ => return Err(ParseErr("Expecting tag to end".to_string())),
-            }
-        }
+        parse!(self.parser.iter(), "tag");
+
         tags.insert(k, v);
         Ok(())
     }
 
     fn parse_member(&self, attrs: sax::Attributes) -> Result<int, OsmParseError> {
         let i = try!(self.parse_int_attr("ref", attrs));
-        
-        for event in self.parser.iter() {
-            match event {
-                Ok(sax::EndElement(name)) => {
-                    try!(self.end_element("member", name));
-                    break;
-                }
-                _ => return Err(ParseErr("Expecting member to end".to_string())),
-            }
-        }
+
+        parse!(self.parser.iter(), "member");
 
         Ok(i)
     }
@@ -194,24 +160,9 @@ impl Osm {
         let mut tags = HashMap::new();
         let mut members = Vec::new();
 
-        for event in self.parser.iter() {
-            match event {
-                Ok(sax::StartElement(name, attrs)) => {
-                    match name.as_slice() {
-                        "member" => members.push(try!(self.parse_member(attrs))),
-                        "tag" => try!(self.parse_tag(attrs, &mut tags)),
-                        _ => return Err(ParseErr(format!(
-                            "Relations can only have members and tags. Got {}",
-                            name)))
-                    }
-                }
-                Ok(sax::EndElement(name)) => {
-                    try!(self.end_element("relation", name));
-                    break;
-                }
-                _ => ()
-            }
-        }
+        parse!(self.parser.iter(), "relation",
+               "member" => |attrs| Ok(members.push(try!(self.parse_member(attrs)))),
+                "tag" => |attrs| self.parse_tag(attrs, &mut tags));
 
         self.elements.insert(id, Relation{id: id, members: members, tags: tags});
         Ok(())
