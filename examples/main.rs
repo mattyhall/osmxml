@@ -1,12 +1,18 @@
 extern crate osmxml;
 
-use osmxml::Osm;
+use osmxml::{Osm, Relation};
 
 fn main() {
     let path = &Path::new("spa.osm");
-    let mut osm = Osm::new(path);
-    osm.parse().unwrap();
-    for (k, v) in osm.elements.iter() {
-        println!("{}: {}", k, v);
-    }
+    let osm = Osm::new(path).unwrap();
+    let track = "Ciruit de Spa Francorchamps".to_string();
+    let relation = osm.elements.values().filter(|e| {
+        match **e {
+            Relation{id: _, members: _, tags: ref ts} => {
+                ts.find(&"name".to_string()) == Some(&track)
+            }
+            _ => false
+        }
+    }).next().unwrap();
+    println!("{}", relation);
 }

@@ -7,7 +7,7 @@ use std::io::IoError;
 pub type Tags = HashMap<String, String>;
 
 #[deriving(Show)]
-enum OsmParseError {
+pub enum OsmParseError {
     IoErr(IoError),
     SaxErr(sax::error::ErrorData),
     ParseErr(String),
@@ -17,9 +17,13 @@ pub type ParseResult = Result<(), OsmParseError>;
 
 #[deriving(Show)]
 pub enum OsmElement {
-    Node{id: int, lat: f64, lng: f64, visible: bool, tags: Tags},
-    Way{id: int, nodes: Vec<int>, tags: Tags},
-    Relation{id: int, members: Vec<int>, tags: Tags},
+    Node {
+        pub id: int,
+        pub lat: f64, pub lng: f64,
+        pub visible: bool, pub tags: Tags
+    },
+    Way { pub id: int, pub nodes: Vec<int>, pub tags: Tags },
+    Relation { pub id: int, pub members: Vec<int>, pub tags: Tags },
 }
 
 macro_rules! parse {
@@ -49,17 +53,19 @@ macro_rules! parse {
 }
 
 pub struct Osm {
-    pub parser: Receiver<sax::ParseResult>,
+    parser: Receiver<sax::ParseResult>,
     pub elements: HashMap<int, OsmElement>,
 }
 
 impl Osm {
-    pub fn new(path: &Path) -> Osm {
+    pub fn new(path: &Path) -> Result<Osm, OsmParseError> {
         let parser = sax::parse_file(path).unwrap();
-        Osm {parser: parser, elements: HashMap::new()}
+        let mut s = Osm {parser: parser, elements: HashMap::new()};
+        try!(s.parse());
+        Ok(s)
     }
     
-    pub fn parse(&mut self) -> ParseResult {
+    fn parse(&mut self) -> ParseResult {
         match self.parser.iter().next().unwrap() {
             Ok(sax::StartDocument) => (),
             Ok(e) => return Err(ParseErr(format!("Document started with: {}", e))),
