@@ -66,7 +66,7 @@ impl Osm {
     }
     
     fn parse(&mut self) -> ParseResult {
-        match self.parser.iter().next().unwrap() {
+        match self.parser.recv() {
             Ok(sax::StartDocument) => (),
             Ok(e) => return Err(ParseErr(format!("Document started with: {}", e))),
             Err(e) => return Err(SaxErr(e))
