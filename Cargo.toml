@@ -4,7 +4,7 @@ name = "osmxml"
 version = "0.0.1"
 authors = ["Matthew Hall <matthew@quickbeam.me.uk>"]
 
-[[lib]]
+[lib]
 name = "osmxml"
 path = "src/lib.rs"
 
@@ -12,6 +12,5 @@ path = "src/lib.rs"
 name = "spa"
 path = "examples/main.rs"
 
-[dependencies.sax-rs]
-git = "https://github.com/bjz/sax-rs"
-
+[dependencies.rust-xml]
+git = "https://github.com/netvl/rust-xml.git"
